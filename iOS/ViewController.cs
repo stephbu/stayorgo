@@ -13,21 +13,39 @@ namespace StayOrGo.iOS
     public partial class ViewController : UIViewController
     {
         OneBusAway ob;
-        Task<bool> dataPump;
+        Task dataPump;
         CoreLocation.CLLocationManager locationManager;
+
+        private ClientLocation lastLocation = new ClientLocation();
 
         public ViewController(IntPtr handle) : base(handle)
         {
-            OneBusAway.Options opt = new OneBusAway.Options { URL = new Uri("http://api.pugetsound.onebusaway.org"), APIKey="efdf5397-9338-447c-832a-ac93ad4c9151" };
+            OneBusAway.Options opt = new OneBusAway.Options { URL = new Uri("http://api.pugetsound.onebusaway.org"), APIKey = "efdf5397-9338-447c-832a-ac93ad4c9151" };
             ob = new OneBusAway(opt);
             CancellationTokenSource cts = new CancellationTokenSource();
 
-			// configure location watcher
-			this.locationManager = new CLLocationManager();
-			this.locationManager.PausesLocationUpdatesAutomatically = false;
-			this.locationManager.RequestWhenInUseAuthorization();
+            this.locationManager = CreateLocationManager();
+            this.locationManager.LocationsUpdated += LocationManager_InitialLocationUpdated;
+			this.locationManager.RequestLocation();
 
-			dataPump = ob.Pump(cts.Token, this.GetClientLocation, this.OnTrip);
+			dataPump = new Task(async () => await ob.Pump(cts.Token, this.GetClientLocation, this.OnTrip));
+		}
+
+        private CLLocationManager CreateLocationManager()
+        {
+
+            // configure location watcher
+            CLLocationManager result = new CLLocationManager();
+            if (UIDevice.CurrentDevice.CheckSystemVersion(8, 0))
+            {
+                result.RequestAlwaysAuthorization();
+            }
+			result.AllowsBackgroundLocationUpdates = true;
+			result.DistanceFilter = CLLocationDistance.FilterNone;
+            result.DesiredAccuracy = CLLocation.AccurracyBestForNavigation;
+            result.PausesLocationUpdatesAutomatically = false;
+
+            return result;
         }
 
         private void OnTrip(DataModels.Trip t) 
@@ -37,8 +55,7 @@ namespace StayOrGo.iOS
 
         public ClientLocation GetClientLocation()
         {
-            var currentLocation = this.locationManager.Location;
-            return new ClientLocation { Latitude = currentLocation.Coordinate.Latitude, Longitude = currentLocation.Coordinate.Longitude, Altitude = currentLocation.Altitude };
+            return lastLocation;
         }
 
 
@@ -52,6 +69,9 @@ namespace StayOrGo.iOS
             Map.ZoomEnabled = true;
             MKCoordinateRegion region = MKCoordinateRegion.FromDistance(this.locationManager.Location.Coordinate, 1000,1000);
             Map.SetRegion(region, false);
+
+			this.locationManager.StartMonitoringSignificantLocationChanges();
+			this.locationManager.StartUpdatingLocation();
 		}
 
         public override void DidReceiveMemoryWarning()
@@ -59,5 +79,23 @@ namespace StayOrGo.iOS
             base.DidReceiveMemoryWarning();
             // Release any cached data, images, etc that aren't in use.		
         }
+
+        void LocationManager_InitialLocationUpdated(object sender, CLLocationsUpdatedEventArgs e)
+        {
+            LocationManager_LocationsUpdated(sender, e);
+
+            // kick the pump
+            this.dataPump.Start();
+		
+            // rewire the notifications
+            this.locationManager.LocationsUpdated -= LocationManager_InitialLocationUpdated;
+			this.locationManager.LocationsUpdated += LocationManager_LocationsUpdated;
+		}
+
+        void LocationManager_LocationsUpdated(object sender, CLLocationsUpdatedEventArgs e)
+        {
+            var currentLocation = e.Locations[0];
+			this.lastLocation = new ClientLocation { Latitude = currentLocation.Coordinate.Latitude, Longitude = currentLocation.Coordinate.Longitude, Altitude = currentLocation.Altitude };
+		}
     }
 }
