@@ -1,30 +1,86 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Runtime.Serialization;
+
 namespace StayOrGo.DataModels
 {
+    
+    [DataContract]
     public class Response 
     {
-        public string Version;
-        public string Code;
-        public long CurrentTime;
-        public string Text;
-        public Payload Data;
+        [DataMember(Name="version")]
+		public string Version;
+
+		[DataMember(Name = "code")]
+		public uint Code;
+
+		[DataMember(Name = "currentTime")]
+		public long CurrentTime;
+
+		[DataMember(Name = "text")]
+		public string Text;
+
     }
 
+    [DataContract]
+    public class RoutesResponse : Response
+    {
+        [DataMember(Name = "data")]
+        public RoutesPayload Data;
+    }
+
+    [DataContract]
     public class Payload
     {
-        public References References;
-        public TransportObjects[] List;
+        [DataMember(Name="limitExceeded")]
+        public bool LimitExceeded;
+
+        [DataMember(Name = "outOfRange")]
+        public bool OutOfRange;
+
+		[DataMember(Name = "references")]
+		public References References;
     }
 
+	[DataContract]
+	public class RoutesPayload
+    {
+        
+		[DataMember(Name = "list")]
+		public List<Route> List;
+	}
+
+    [DataContract]
     public class References
     {
+        [DataMember(Name="agencies")]
+		public List<Agency> Agencies;
+
+		[DataMember(Name = "vehicles")]
+		public List<Vehicle> Vehicles;
+
+		[DataMember(Name = "routes")]
+		public List<Route> Routes;
     }
 
-    public abstract class TransportObjects {};
+	[DataContract]
+	public class TransportObjects {};
 
-    public class Vehicle : TransportObjects
+    [DataContract]
+    public class Agency : TransportObjects
     {
-        public string VehicleID;
+        [DataMember(Name="id")]
+        public string ID;
+
+		[DataMember(Name = "name")]
+		public string Name;
+	}
+
+	[DataContract(Name="vehicle")]
+	public class Vehicle : TransportObjects
+    {
+		[DataMember(Name = "id")]
+		public string ID;
         public string LicencePlate;
         public string Label;
     }
@@ -43,17 +99,33 @@ namespace StayOrGo.DataModels
         public bool BikesAllowed;
     }
 
-    public class Route : TransportObjects
+	[DataContract(Name = "route")]
+	public class Route : TransportObjects
     {
-        public string RouteID;
-        public string AgencyID;
-        public string ShortName;
-        public string LongName;
-        public string Description;
-        public uint Type;
-        public string URL;
-        public UInt32 Color;
-        public UInt32 TextColor;
+		[DataMember(Name = "id")]
+		public string ID;
+
+		[DataMember(Name = "agencyId")]
+		public string AgencyID;
+
+		[DataMember(Name = "shortName")]
+		public string ShortName;
+
+		[DataMember(Name = "longName")]
+		public string LongName;
+
+		[DataMember(Name = "description")]
+		public string Description;
+
+		[DataMember(Name = "type")]
+		public uint Type;
+
+		[DataMember(Name = "url")]
+		public string URL;
+
+        // TODO : marshal these correctly
+        // public UInt32 Color;
+        // public UInt32 TextColor;
     }
 
     public class Stop

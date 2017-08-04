@@ -4,12 +4,13 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
+using System.Runtime.Serialization.Json;
 
 using DataModels;
 
 namespace StayOrGo
 {
-    public class OneBusAway
+    public class OBADataProvider : IRouteProvider
     {
         public class Options
         {
@@ -18,18 +19,20 @@ namespace StayOrGo
             public string APIKey;
         }
 
-        HttpClient client = OneBusAway.createClient();
+        public event EventHandler<List<DataModels.Route>> OnLocationRoutesChanged; 
+
+        HttpClient client = OBADataProvider.createClient();
 
         private Options options;
 
-        private string routesForLocation = "{ROOTURL}api/where/routes-for-location.json?key={APIKEY}&lat={LATITUDE}&lon={LONGITUDE}&radius=30m";
+        private string routesForLocation = "{ROOTURL}api/where/routes-for-location.json?key={APIKEY}&lat={LATITUDE}&lon={LONGITUDE}";
         private string stopsForLocation = "{ROOTURL}api/where/stops-for-location.json?key={APIKEY}&lat={LATITUDE}&lon={LONGITUDE}";
         private string stopInformation = "{ROOTURL}api/where/stop/{STOPID}.json?key={APIKEY}";
         private string routeInformation = "{ROOTURL}api/where/route/{ROUTEID}.json?key={APIKEY}";
 
         private Dictionary<string, string> baseDictionary = new Dictionary<string, string>(); 
 
-        public OneBusAway(Options options)
+        public OBADataProvider(Options options)
         {
             if(string.IsNullOrWhiteSpace(options.URL.ToString()))
             {
@@ -38,6 +41,8 @@ namespace StayOrGo
             this.options = options;
             baseDictionary.Add("ROOTURL", options.URL.ToString());
             baseDictionary.Add("APIKEY", options.APIKey);
+
+            this.OnLocationRoutesChanged += delegate {};
         }
 
         /// <summary>
@@ -60,6 +65,8 @@ namespace StayOrGo
         /// <param name="callback">Action to get called when data arrives</param>
         public async Task<bool> Pump(CancellationToken token, Func<ClientLocation> clientLocationProvider, Action<DataModels.Trip> callback)
         {
+            DataContractJsonSerializer serializer = new DataContractJsonSerializer(typeof(DataModels.RoutesResponse));
+
             var clientDictionary = new Dictionary<string, string>();
             DateTime nextRunTime = DateTime.UtcNow;
 
@@ -75,14 +82,23 @@ namespace StayOrGo
 						clientDictionary["LATITUDE"] = location.Latitude.ToString();
 						clientDictionary["LONGITUDE"] = location.Longitude.ToString();
 
-						var url = stopsForLocation.ExpandStrings(baseDictionary).ExpandStrings(clientDictionary);
+						var url = routesForLocation.ExpandStrings(baseDictionary).ExpandStrings(clientDictionary);
 						Debug.WriteLine(url);
 
 						var response = await client.GetAsync(url);
                         if(response.IsSuccessStatusCode)
                         {
-                            string data = await response.Content.ReadAsStringAsync();
-                            Debug.WriteLine(data);
+                            using(var stream = await response.Content.ReadAsStreamAsync())
+                            {
+								DataModels.RoutesResponse data = serializer.ReadObject(stream) as DataModels.RoutesResponse;
+								Debug.WriteLine(data.Version);
+
+                                if(data.Code == 200)
+                                {
+                                    // publish updated list of routes nearby.
+                                    this.OnLocationRoutesChanged(this, data.Data.List);
+                                }
+							}
                         }
                         else
                         {
